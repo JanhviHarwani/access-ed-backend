@@ -3,3 +3,5 @@ accessibility_bot_env
 .env
 data
 flagged
+venv
+.DS_Store
