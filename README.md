@@ -6,7 +6,6 @@ cd src/scraping_scripts
 python web_processor.py
 
 start backend:
-cd backend
 source venv/bin/activate
 pip install -r requirements.txt
 cd src
