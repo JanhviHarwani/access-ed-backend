@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -9,6 +10,7 @@ from rag_handler import RAGHandler
 from dotenv import load_dotenv
 import logging
 from contextlib import asynccontextmanager
+from sentence_transformers import SentenceTransformer
 
 # Configure logging
 logging.basicConfig(
@@ -20,6 +22,17 @@ logger = logging.getLogger(__name__)
 # Initialize components
 load_dotenv()
 
+# Global variables for components
+doc_processor = None
+pinecone_manager = None
+rag_handler = None
+
+@lru_cache()
+def get_model():
+    """Lazy loading of the model"""
+    logger.info("Loading SentenceTransformer model...")
+    return SentenceTransformer("BAAI/bge-base-en")
+
 # Lifespan context manager for startup and shutdown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,6 +41,7 @@ async def lifespan(app: FastAPI):
     global doc_processor, pinecone_manager, rag_handler
     
     try:
+        # Initialize basic components first
         doc_processor = DocumentProcessor()
         pinecone_manager = PineconeManager()
         rag_handler = RAGHandler()
@@ -40,6 +54,8 @@ async def lifespan(app: FastAPI):
             logger.info(f"Processed and uploaded {len(documents)} document chunks")
         else:
             logger.info("Using existing Pinecone index - skipping document processing")
+            
+        logger.info("Basic components initialized")
     
     except Exception as e:
         logger.error(f"Error during startup: {str(e)}")
@@ -112,6 +128,9 @@ async def chat(
     try:
         logger.info(f"Received chat request with message: {request.message}")
         
+        # Ensure model is loaded
+        _ = get_model()
+        
         # Search for relevant documents
         results = pinecone_manager.search(request.message)
         
@@ -170,15 +189,13 @@ async def general_exception_handler(request, exc):
 
 if __name__ == "__main__":
     import uvicorn
+    port = int(os.getenv('PORT', 8000))
     
-    # port = int(os.getenv('PORT', 8000))
-    # host = os.getenv('HOST', '0.0.0.0')
-    
-    logger.info(f"Starting server on {'0.0.0.0'}:{8000}")
+    logger.info(f"Starting server on 0.0.0.0:{port}")
     
     uvicorn.run(
-        "main:app",
+        app,
         host="0.0.0.0",
-        port=8000,
-        reload=True
+        port=port,
+        log_level="info"
     )
