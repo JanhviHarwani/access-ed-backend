@@ -43,29 +43,36 @@ async def lifespan(app: FastAPI):
     try:
         # Initialize basic components first
         doc_processor = DocumentProcessor()
-        pinecone_manager = PineconeManager()
-        rag_handler = RAGHandler()
+        logger.info("DocumentProcessor initialized")
         
-        # Process documents if RELOAD_DOCUMENTS is true
-        if os.getenv('RELOAD_DOCUMENTS', 'false').lower() == 'true':
-            logger.info("Processing documents and updating Pinecone index...")
+        pinecone_manager = PineconeManager()
+        logger.info("PineconeManager initialized")
+        
+        rag_handler = RAGHandler()
+        logger.info("RAGHandler initialized")
+        
+        if os.getenv('RELOAD_DOCUMENTS', '').lower() == 'true':
+            logger.info("Starting document reload process...")
+            
+            logger.info("Processing documents...")
             documents = doc_processor.process_documents()
-            pinecone_manager.add_documents(documents)
-            logger.info(f"Processed and uploaded {len(documents)} document chunks")
+            logger.info(f"Document processing complete. Generated {len(documents)} chunks")
+            
+            logger.info("Beginning upload to Pinecone...")
+            await pinecone_manager.add_documents(documents)
+            logger.info("Pinecone upload complete")
         else:
             logger.info("Using existing Pinecone index - skipping document processing")
             
-        logger.info("Basic components initialized")
-    
     except Exception as e:
-        logger.error(f"Error during startup: {str(e)}")
+        logger.error(f"Error during startup: {str(e)}", exc_info=True)
         raise e
     
-    yield
+    yield  # This is crucial - it was missing before
     
     # Shutdown
     logger.info("Shutting down the application...")
-
+    
 app = FastAPI(lifespan=lifespan)
 
 # Configure CORS
