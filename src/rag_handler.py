@@ -1,3 +1,5 @@
+
+
 from openai import OpenAI
 import os
 from typing import List, Dict
@@ -34,8 +36,9 @@ class RAGHandler:
             # Create system prompt that encourages including source references
             system_prompt = """You are an expert assistant helping educators make education accessible 
             for students with disabilities. Provide accurate, practical information while maintaining 
-            a professional and direct tone. After providing your response, ALWAYS end with a line that says 
-            'For more information, visit: [source_url]' using the source URLs from the context."""
+            a professional and direct tone. After providing your response, include unique sources with proper 
+            link formatting, like this: 'For more information, visit: [source_title](source_url)' 
+            using the source URLs from the context. Do not repeat the same URL multiple times."""
             
             # Construct the user prompt with explicit source URL instruction
             user_prompt = f"""Context: {context_data['content']}
@@ -43,10 +46,13 @@ class RAGHandler:
 Based on the above context, please answer the following question:
 {query}
 
-Remember to end your response by directing users to the source using this format:
-For more information, visit: [actual_url_here]
+Remember to include 2-3 most relevant source links at the end of your response using markdown link format:
+For more information, visit: [Title of Source](actual_url_here)
 
-You can find the source URL in this context:
+IMPORTANT: Only include each unique source URL once, even if it appears multiple times in the context.
+Each URL should be properly formatted as a markdown link with descriptive text.
+
+You can find the source URLs and titles in this context:
 {context_data['source_info']}"""
 
             # Generate response using chat completion
@@ -61,11 +67,60 @@ You can find the source URL in this context:
                 max_tokens=500
             )
             
-            return response.choices[0].message.content
+            response_content = response.choices[0].message.content
+            
+            # Clean up any potential duplicated or improperly formatted URLs
+            response_content = self._clean_source_references(response_content)
+            
+            return response_content
             
         except Exception as e:
             logger.error(f"Error generating response: {str(e)}")
             return "I apologize, but I encountered an error processing your request. Please try again."
+
+    def _clean_source_references(self, response: str) -> str:
+        """Clean up source references to ensure unique, properly formatted URLs"""
+        
+        # Find all URLs in the response
+        url_pattern = r'https?://[^\s\)"\']+(?:\([^\s]*\)|[^\s\)\",\']*)'
+        all_urls = re.findall(url_pattern, response)
+        
+        # Get unique URLs
+        seen_urls = set()
+        duplicates = []
+        
+        for url in all_urls:
+            # Clean up URL - remove trailing punctuation
+            clean_url = re.sub(r'[\.\,\;\:\)\]\}]+$', '', url)
+            
+            # Check if it's a duplicate
+            if clean_url in seen_urls:
+                duplicates.append(url)
+            else:
+                seen_urls.add(clean_url)
+        
+        # Handle cases where URLs appear in both formatted and unformatted ways
+        # Look for patterns like: For more information, visit: URL (URL) or For more information, visit: URL(URL)
+        for dup in duplicates:
+            # Find and remove redundant parenthetical URLs
+            pattern = r'\([^\)]*' + re.escape(dup) + r'[^\)]*\)'
+            response = re.sub(pattern, '', response)
+            
+            # Remove duplicate plain URLs that follow a markdown link
+            pattern = r'\]\(' + re.escape(dup) + r'\)[\s\n]*' + re.escape(dup)
+            response = re.sub(pattern, '](' + dup + ')', response)
+        
+        # Find sections like "For more information, visit:" followed by bare URLs
+        visit_pattern = r'For more information, visit:\s*(https?://[^\s]+)'
+        
+        def replace_with_markdown_link(match):
+            url = match.group(1)
+            return f'For more information, visit: [{url}]({url})'
+        
+        # Replace bare URLs with markdown links
+        response = re.sub(visit_pattern, replace_with_markdown_link, response)
+        
+        return response
 
     def _check_relevance(self, retrieved_docs: List[Dict], threshold: float = 0.6) -> bool:
         """Check if retrieved documents are relevant enough"""
@@ -117,6 +172,7 @@ You can find the source URL in this context:
         """Prepare context and sources from retrieved documents"""
         contexts = []
         source_info = []
+        seen_urls = set()  # Track unique source URLs
         
         for doc in retrieved_docs:
             if hasattr(doc, 'metadata'):
@@ -130,23 +186,27 @@ You can find the source URL in this context:
                     url = url_match.group(1).strip() if url_match else None
                     title = title_match.group(1).strip() if title_match else None
                     
-                    # Clean the content by removing the metadata header
-                    content_lines = content.split('\n')
-                    cleaned_content = []
-                    skip_until_content = True
-                    
-                    for line in content_lines:
-                        if skip_until_content and line.strip() == 'Content:':
-                            skip_until_content = False
-                            continue
-                        if not skip_until_content and line.strip():
-                            cleaned_content.append(line)
-                    
-                    # Add to contexts and source info
-                    if cleaned_content:
-                        contexts.append('\n'.join(cleaned_content))
-                    if url:
-                        source_info.append(f"Source: {title if title else 'Document'} - {url}")
+                    # Only add unique URLs
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        
+                        # Clean the content by removing the metadata header
+                        content_lines = content.split('\n')
+                        cleaned_content = []
+                        skip_until_content = True
+                        
+                        for line in content_lines:
+                            if skip_until_content and line.strip() == 'Content:':
+                                skip_until_content = False
+                                continue
+                            if not skip_until_content and line.strip():
+                                cleaned_content.append(line)
+                        
+                        # Add to contexts and source info
+                        if cleaned_content:
+                            contexts.append('\n'.join(cleaned_content))
+                        if url:
+                            source_info.append(f"Source: {title if title else 'Document'} - {url}")
 
         return {
             'content': '\n\n'.join(contexts),
@@ -167,3 +227,5 @@ You can find the source URL in this context:
                 clean_lines.append(line)
                 
         return '\n'.join(clean_lines)
+
+
