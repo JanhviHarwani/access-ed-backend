@@ -22,24 +22,39 @@ class DocumentProcessor:
             logger.info("Starting document processing...")
             documents = []
             
+            # Get all categories first and log them
+            categories = os.listdir(self.categories_dir)
+            logger.info(f"Found categories: {categories}")
+            
             # Process each category
-            for category in os.listdir(self.categories_dir):
+            for category in categories:
                 category_path = os.path.join(self.categories_dir, category)
                 if os.path.isdir(category_path):
                     logger.info(f"Processing category: {category}")
                     
+                    # Get and log all files in category first
+                    files = [f for f in os.listdir(category_path) if f.endswith('.txt')]
+                    logger.info(f"Found {len(files)} files in category {category}: {files}")
+                    
                     # Process each file in category
-                    for filename in os.listdir(category_path):
-                        if filename.endswith('.txt'):
+                    for filename in files:
+                        try:
                             filepath = os.path.join(category_path, filename)
+                            logger.info(f"Starting to process file: {filepath}")
                             chunks = self._process_file(filepath, category, filename)
                             documents.extend(chunks)
+                            logger.info(f"Successfully processed {filename}")
+                        except Exception as e:
+                            logger.error(f"Error processing file {filename}: {str(e)}")
+                            continue  # Continue with next file even if one fails
+                    
+                    logger.info(f"Finished processing category: {category}")
             
-            logger.info(f"Processed {len(documents)} total chunks")
+            logger.info(f"Processed {len(documents)} total chunks across all categories")
             return documents
             
         except Exception as e:
-            logger.error(f"Error processing documents: {str(e)}")
+            logger.error(f"Error processing documents: {str(e)}", exc_info=True)
             raise
 
     def _process_file(self, filepath: str, category: str, filename: str) -> List[Dict]:

@@ -38,5 +38,5 @@ python main.py
 Last update:
 process processed folder
 need to scrape off of urls.txt has content for research on Research on accessing CS
-
+- to add data into pinecone document_processor and pinecone manager has some code differences in the new github repo, hence use the older repo for uploading data into pinecone vector db
 
