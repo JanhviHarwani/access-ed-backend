@@ -1,15 +1,8 @@
-# Access-Ed-Assistant
-to start scraping:
-cd backend
-source venv/bin/activate
-cd src/scraping_scripts 
-python web_processor.py
-
 start backend:
 source venv/bin/activate
 pip install -r requirements.txt
 cd src
-python main.py
+python3 main.py
 
 An intelligent chatbot that assists faculty in creating inclusive educational environments. Provides real-time guidance on accessibility accommodations, course material adaptation, and inclusive teaching strategies to support students with diverse learning needs.
 
