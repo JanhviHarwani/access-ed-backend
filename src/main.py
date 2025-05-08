@@ -226,7 +226,7 @@ async def general_exception_handler(request, exc):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv('PORT', 8000))
+    port = int(os.getenv('PORT', 8443))
     
     logger.info(f"Starting server on 0.0.0.0:{port}")
     
